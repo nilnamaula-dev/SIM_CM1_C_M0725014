@@ -1,0 +1,195 @@
+---
+title: "Analisis Data Film pada Databases Sakila"
+author: "M0725014"
+date: "2026-05-24"
+output: 
+html_document: 
+theme: cosmo 
+highlight: 
+tango toc: true 
+toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+<div style="text-align:center;">
+# Analisis Data Film pada Database Sakila 
+<style> 
+    body { 
+        font-family: Arial, sans-serif; 
+        background-color: #f4f4f4; 
+    } 
+    h1, h2 { 
+        color: darkblue; 
+    } 
+    p { 
+        font-size: 18px; 
+        color: #030303; 
+    } 
+</style>
+### Sistem Informasi Manajemen 
+
+**M0725014** 
+</div> 
+<hr style="border:2px solid #003566;">
+
+# Pendahuluan
+<div style="text-align:justify;">
+Database Sakila merupakan database simulasi yang digunakan untuk menggambarkan sistem rental film. Database ini memiliki berbagai informasi seperti data film, kategori film, pelanggan, transaksi rental, dan pembayaran. 
+
+Pada laporan ini dilakukan analisis terhadap beberapa insight dari database Sakila untuk mengetahui pola penyewaan film oleh pelanggan. Analisis dilakukan menggunakan query SQL, visualisasi data, dan interpretasi hasil sehingga dapat digunakan sebagai dasar pengambilan keputusan bisnis pada industri rental film.
+</div>
+# Library
+<div style="text-align:justify;">
+Pada tahap ini dilakukan pemanggilan beberapa *library* yang digunakan dalam proses koneksi database, pengolahan data, dan visualisasi data.
+</div>
+```{r library}
+library(DBI)
+library(odbc)
+library(ggplot2)
+library(dplyr)
+```
+# Connect SQL
+<div style="text-align:justify;">
+Pada tahap ini dilakukan koneksi antara *R* dan database MySQL Sakila menggunakan package `DBI` dan `odbc`.
+</div>
+```{r connectsql}
+con <- dbConnect( odbc(), 
+                  Driver = "MySQL ODBC 8.0 Unicode Driver", 
+                  Server = "127.0.0.1", 
+                  Database = "sakila", 
+                  UID = "root", 
+                  PWD = "admin123", 
+                  Port = 3306 )
+```
+<hr> 
+<div style="background-color:#EAF4FF; 
+padding:15px; 
+border-radius:10px;">
+# Insight 1: Popularitas Genre Film
+
+## Deskripsi Insight
+<div style="text-align:justify;">
+Insight pertama bertujuan untuk mengetahui genre film yang paling serfing dirental oleh pelanggan. Analisis ini dilakukan untuk mengetahui genre film apa yang paling sering diminati.
+</div>
+## Pengambilan Data
+```{r querysql:insight1}
+query1 <- "select c.name as category,
+       count(r.rental_id) as total_rental
+from rental r
+join inventory i on r.inventory_id = i.inventory_id
+join film f on i.film_id = f.film_id
+join film_category fc on f.film_id = fc.film_id
+join category c on fc.category_id = c.category_id
+group by c.name
+order by total_rental desc"
+
+genre_rental <- dbGetQuery(con, query1) 
+genre_rental$total_rental <- as.numeric(genre_rental$total_rental)
+genre_rental
+```
+</div>
+
+## Analisis Data
+<div style="text-align:justify;">
+Analisis dilakukan menggunakan query SQL untuk menghitung jumlah transaksi rental pada setiap kategori film. Query bekerja dengan menggabungkan beberapa tabel pada database Sakila, yaitu tabel `rental`, `inventory`, `film`, `film_category`, dan `category`. Fungsi `COUNT()` digunakan untuk menghitung total transaksi rental pada masing-masing kategori film, kemudian hasil diurutkan dari jumlah rental terbesar ke terkecil menggunakan `ORDER BY`. Persamaan umum fungsi rata-rata dalam analisis statistik dituliskan sebagai berikut:
+</div>
+$$ \bar{x} = \frac{\sum_{i=1}^{n}x_i}{n} $$ 
+Keterangan: 
+>\(\bar{x}\) = nilai rata-rata 
+>\(x_i\) = data ke-\(i\) 
+>\(n\) = jumlah data
+
+## Visualisasi Data
+<div style="text-align:justify;">
+Visualisasi dilakukan menggunakan diagram batang (*bar chart*) untuk membandingkan jumlah rental pada setiap kategori film.
+</div>
+```{r visualisasidata_popularitasgenre}
+ggplot( 
+  genre_rental, 
+  aes( x = reorder(category, total_rental), 
+       y = total_rental, fill = total_rental ) ) + 
+  geom_bar( stat = "identity", color = "white" ) + 
+  geom_text( aes(label = total_rental), 
+             hjust = -0.1, size = 3 ) + 
+  scale_fill_gradient( low = "#9FD3FF", 
+                      high = "#003566" ) + 
+  coord_flip() + 
+  labs( title = "Jumlah Rental Berdasarkan Kategori Film", 
+        subtitle = "Analisis popularitas genre film pada database Sakila", 
+        x = "Kategori Film", 
+        y = "Jumlah Rental" ) + 
+  theme_minimal() + 
+  theme( legend.position = "none", plot.title = element_text(face = "bold") )
+```
+<div style="background-color:#FFF4E0; 
+padding:10px; 
+border-left:6px solid orange;">
+## Interpretasi Data
+<div style="text-align:justify;">
+Berdasarkan hasil analisis, terdapat perbedaan jumlah rental pada setiap kategori film. Genre dengan jumlah rental tertinggi menunjukkan bahwa kategori tersebut lebih diminati pelanggan dibandingkan kategori lainnya.
+</div>
+</div>
+
+<hr> 
+<div style="background-color:#EAF4FF; 
+padding:15px; 
+border-radius:10px;">
+# Insight 2: TOP 10 Film Populer
+
+## Deskripsi Insight
+<div style="text-align:justify;">
+Insight kedua bertujuan untuk mengetahui film yang paling sering dirental oleh pelanggan. Analisis ini dapat menunjukkan film mana yang memiliki tingkat popularitas paling tinggi.
+</div>
+## Pengambilan Data
+```{r querysql:insight2}
+query2 <- "select f.title as judul_film,
+       count(r.rental_id) as total_rental
+from rental r
+join inventory i
+on r.inventory_id = i.inventory_id
+join film f
+on i.film_id = f.film_id
+group by f.title
+order by total_rental desc
+limit 10;"
+
+top10_film <- dbGetQuery(con, query2)
+top10_film$total_rental <- as.numeric(top10_film$total_rental)
+top10_film
+```
+</div>
+
+## Analisis Data
+<div style="text-align:justify;">
+Analisis dilakukan menggunakan fungsi `COUNT()` untuk menghitung jumlah transaksi rental pada setiap film, kemudian dipilih 10 film dengan jumlah rental tertinggi menggunakan `LIMIT 10`.
+</div>
+## Visualisasi Data 
+```{r visualisasidata_topfilm} 
+ggplot( top10_film, 
+        aes( x = reorder(judul_film, total_rental), 
+             y = total_rental, fill = total_rental ) ) + 
+  geom_bar( stat = "identity", color = "white" ) + 
+  geom_text( aes(label = total_rental), 
+             hjust = -0.1, size = 3 ) + coord_flip() + 
+  theme_minimal() + 
+  labs( title = "Top 10 Film Populer", 
+        x = "Judul Film", y = "Jumlah Rental" ) + 
+  theme( legend.position = "none" ) 
+``` 
+<div style="background-color:#FFF4E0; 
+padding:10px; 
+border-left:6px solid orange;">
+## Interpretasi Hasil
+<div style="text-align:justify;">
+analisis menunjukkan bahwa beberapa film memiliki jumlah rental yang jauh lebih tinggi dibandingkan film lainnya. Film dengan jumlah rental tertinggi menunjukkan tingkat popularitas yang tinggi di kalangan pelanggan.
+</div>
+</div>
+
+<hr> 
+
+# Kesimpulan
+<div style="text-align:justify;">
+Berdasarkan analisis yang telah dilakukan terhadap database Sakila, diperoleh beberapa insight mengenai pola penyewaan film pada bisnis rental film. Genre film tertentu memiliki tingkat popularitas lebih tinggi dibandingkan genre lainnya. Selain itu, terdapat beberapa film yang memiliki jumlah rental tertinggi sehingga dapat dikategorikan sebagai film populer. Analisis juga menunjukkan adanya pelanggan dengan aktivitas rental yang sangat tinggi. Hasil analisis ini dapat digunakan sebagai dasar pengambilan keputusan bisnis, seperti strategi promosi film, pengelolaan stok film, dan pemberian layanan khusus kepada pelanggan aktif.
+</div>
